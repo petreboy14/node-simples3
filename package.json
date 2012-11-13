@@ -1,0 +1,10 @@
+
+{
+  "name": "node-simples3",
+  "version": "0.0.1",
+  "description": "A simple s3 library for node",
+  "dependencies": {
+    "request": "",
+    "xml2json": ""
+  }
+}
