@@ -11,7 +11,7 @@ var request = require('request'),
 
 var s3 = module.exports = function (config) {
     if (!config.key || !config.secret) {
-        throw new Error ("Must supply key and secret");
+        throw new Error("Must supply key and secret");
     }
     if (!(this instanceof s3)) return new s3(config);
     this.config = config;
@@ -27,7 +27,11 @@ var s3 = module.exports = function (config) {
 s3.prototype.getBuckets = function (callback) {
     var options = new this.baseOptions();
     request.get(options, function (err, response, body) {
-        callback(err, JSON.parse(xml.toJson(body || "")).ListAllMyBucketsResult);
+        var bucketList = JSON.parse(xml.toJson(body || "")).ListAllMyBucketsResult;
+        if (bucketList.Buckets && !bucketList.Buckets.Bucket[0]) {
+            bucketList.Buckets.Bucket = [bucketList.Buckets.Bucket];
+        }
+        callback(err, bucketList);
     });
 };
 
@@ -72,8 +76,12 @@ s3.prototype.getBucket = function (bucket, callback) {
     options.uri = [options.uri, bucket].join('/');
     request.get(options, function (err, response, body) {
         var reply = JSON.parse(xml.toJson(body || ""));
-        if (reply.ListBucketResult) {
-            callback(err, reply.ListBucketResult);
+        var bucketInfo = reply.ListBucketResult;
+        if (bucketInfo) {
+            if (bucketInfo.Contents && !bucketInfo.Contents[0]) {
+                bucketInfo.Contents = [bucketInfo.Contents];
+            }
+            callback(err, bucketInfo);
         } else {
             callback(true, reply.Error);
         }
@@ -121,6 +129,7 @@ s3.prototype.getRawObject = function (bucket, objectId, callback) {
 s3.prototype.updateObject = function (bucket, objectId, objectData, callback) {
     var options = new this.baseOptions(),
         self = this;
+    objectId = objectId || objectData.path.split('/').pop(); //Let object path define objectId
     options.uri = [options.uri, bucket, objectId].join('/');
     options.headers = {"Content-Type": objectData.type};
     options.body = fs.readFileSync(objectData.path);

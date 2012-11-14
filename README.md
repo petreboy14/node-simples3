@@ -83,7 +83,7 @@ Get raw object
 ```javascript
 // This method pipes the object straight to the given response object,
 // which is helpful if your code doesn't need to inspect the object
-s3Store.getRawObject('myBucket', 'objectId, response);
+s3Store.getRawObject('myBucket', 'objectId', response);
 ```
 
 Create object
@@ -96,6 +96,14 @@ s3Store.createObject('myBucket', 'cat_macro.png', fileInfo, function (err, objec
     //Returns info for the uploaded object
     console.log(object);
 });
+
+// You can also omit the objectId and let the file path define what it will be
+var fileInfo = {path: './images/funny/cat_macro.png', "type": 'image/png'}
+s3Store.createObject('myBucket', null, fileInfo, function (err, object) {
+    //Returns info for the uploaded object
+    console.log(object); //Object id will be 'cat_macro.png'
+});
+
 ```
 
 Update object
