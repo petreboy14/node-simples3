@@ -118,7 +118,7 @@ s3Store.createObject('myBucket', null, fileInfo, function _newObject(err, object
 
 Update object
 -------------
-works just like creating an object, just use updateObject instead.
+Works just like creating an object, just use updateObject instead.
 There isn't much of a distinction between the two in S3
 
 Delete object
