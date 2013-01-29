@@ -4,7 +4,9 @@
   "version": "0.0.2",
   "description": "A simple s3 library for node",
   "dependencies": {
-    "request": "",
+    "querystring": "",
+    "request": "*",
+    "crypto": "*",
     "xml2json": ""
   }
 }
