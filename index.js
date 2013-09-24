@@ -28,7 +28,7 @@ function _extend() {
     }
     
     return obj;
-};
+}
 
 function _lowerCase(o) {
     var obj = {};
@@ -50,7 +50,7 @@ function _lowerCase(o) {
 
         return obj;
     }
-};
+}
 
 // return a configured client
 exports.createClient = function (config) {
@@ -59,14 +59,14 @@ exports.createClient = function (config) {
 
 // the client
 var SimpleS3 = function (config) {
-  if (!config.key || !config.secret) throw new Error('Must supply key and secret');
-  this.host = config.host || 'https://s3.amazonaws.com';
-  this.config = config;
-  this.options = {
-      path: '/',
-      method: 'GET',
-      headers: {}
-  };
+    if (!config.key || !config.secret) throw new Error('Must supply key and secret');
+    this.host = config.host || 'https://s3.amazonaws.com';
+    this.config = config;
+    this.options = {
+        path: '/',
+        method: 'GET',
+        headers: {}
+    };
 };
 
 // generate a signature for the request
@@ -105,7 +105,7 @@ SimpleS3.prototype._getSignature = function (options, date) {
 
     // find the content-type and content-md5 headers
     Object.keys(request.headers).forEach(function (h) {
-        hl = h.toLowerCase();
+        var hl = h.toLowerCase();
         if (hl === 'content-type') {
             contentType = request.headers[h];
         } else if (hl === 'content-md5') {
@@ -267,7 +267,7 @@ SimpleS3.prototype.getObjectUrl = function (bucketName, objectId, expiration, ca
     if (expiration <= date) return callback(new Error('Expiration must be in the future'));
 
     var expires = parseInt(expiration / 1000, 10);
-    var date = date.toUTCString();
+    date = date.toUTCString();
     var path = '/' + bucketName + '/' + objectId;
     var string = util.format('GET\n\n\n%s\n%s', expires, path);
     var signature = crypto.createHmac('sha1', this.config.secret).update(string).digest('base64');
