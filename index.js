@@ -1,9 +1,12 @@
-var request = require('request');
-var xml = require('xml2json');
 var crypto = require('crypto');
-var http = require('http');
-var querystring = require('querystring');
 var fs = require('fs');
+var url = require('url');
+var querystring = require('querystring');
+var http = require('http');
+var util = require('util');
+var hyperquest = require('hyperquest');
+var xml = require('faketoe');
+var varname = require('varname');
 
 /* Config should have:
  * host: 'http://hostname.com/no/trailing/slash'
@@ -11,173 +14,321 @@ var fs = require('fs');
  * secret: 'AWSSecret'
  */
 
-var s3 = module.exports = function (config) {
-  if (!config.key || !config.secret) {
-    throw new Error('Must supply key and secret');
-  }
-  if (!(this instanceof s3)) return new s3(config);
+// just so i don't have to require underscore for one function
+function _extend() {
+    var obj = {};
+    var arg;
+    var args = Array.prototype.slice.call(arguments);
+
+    while (args.length) {
+        arg = args.shift();
+        for (var key in arg) {
+            obj[key] = arg[key];
+        }
+    }
+    
+    return obj;
+};
+
+function _lowerCase(o) {
+    var obj = {};
+
+    // don't lowercase values
+    if (typeof o === 'string') return o;
+
+    if (Array.isArray(o)) {
+        obj = [];
+        for (var i = 0, l = o.length; i < l; i++) {
+            obj.push(_lowerCase(o[i]));
+        }
+
+        return obj;
+    } else {
+        for (var key in o) {
+            obj[varname.camelback(key)] = _lowerCase(o[key]);
+        }
+
+        return obj;
+    }
+};
+
+// return a configured client
+exports.createClient = function (config) {
+    return new SimpleS3(config);
+};
+
+// the client
+var SimpleS3 = function (config) {
+  if (!config.key || !config.secret) throw new Error('Must supply key and secret');
+  this.host = config.host || 'https://s3.amazonaws.com';
   this.config = config;
-  this.baseOptions = function () {
-    return {
-      uri: config.host || 'https://s3.amazonaws.com',
-      aws: {key: config.key, secret: config.secret}
-    };
+  this.options = {
+      path: '/',
+      method: 'GET',
+      headers: {}
   };
 };
 
-/* Returns all buckets */
-s3.prototype.getBuckets = function (callback) {
-  var options = new this.baseOptions();
-  request.get(options, function _getReponse(err, response, body) {
-    var bucketList = JSON.parse(xml.toJson(body || '')).ListAllMyBucketsResult;
-    if (bucketList.Buckets && !bucketList.Buckets.Bucket[0]) {
-      bucketList.Buckets.Bucket = [bucketList.Buckets.Bucket];
-    }
-    callback(err, bucketList);
-  });
-};
+// generate a signature for the request
+SimpleS3.prototype._getSignature = function (options, date) {
+    options = options || {};
+    var request = _extend(this.options, options);
+    request.uri = this.host + request.path;
+    var parsedUri = url.parse(request.uri, true);
+    var resource = parsedUri.pathname;
+    var query = [];
+    var headersBuffer = [];
+    var headers;
+    var key;
+    var header;
+    var string;
+    var signature;
+    var contentType = '';
+    var contentMD5 = '';
 
-/* Creates a new bucket, returns new bucket */
-s3.prototype.createBucket = function (bucket, callback) {
-  var options = new this.baseOptions();
-  var self = this;
-  options.uri = [options.uri, bucket].join('/');
-  options.headers = { 'x-amz-acl': 'private' };
-  request.put(options, function _putResponse(err, response, body) {
-    if (!err && !body) {
-      self.getBucket(bucket, callback);
-    } else {
-      callback(err, JSON.parse(xml.toJson(body || '')));
-    }
-  });
-};
-
-/* Deletes a bucket, returns deleted bucket */
-s3.prototype.deleteBucket = function (bucket, callback) {
-  var options = new this.baseOptions();
-  var self = this;
-  options.uri = [options.uri, bucket].join('/');
-  self.getBucket(bucket, function _getResponse(err, bucket) {
-    if (err) {
-      callback(err, bucket);
-    } else {
-      request.del(options, function _delResponse(err, response, body) {
-        if (!err && !body) {
-          callback(err, bucket);
-        } else {
-          callback(err, JSON.parse(xml.toJson(body || '')));
+    // sort and append query parameters to the resource string
+    if (Object.keys(parsedUri.query).length) {
+        for (key in parsedUri.query) {
+            query.push(key + '=' + parsedUri.query[key]);
         }
-      });
+        resource += '?' + query.sort().join('&');
     }
-  });
-};
 
-/* Retrieves info on one bucket */
-s3.prototype.getBucket = function (bucket, callback) {
-  var options = new this.baseOptions();
-  options.uri = [options.uri, bucket].join('/');
-  request.get(options, function _getResponse(err, response, body) {
-    var reply = JSON.parse(xml.toJson(body || ''));
-    var bucketInfo = reply.ListBucketResult;
-    if (bucketInfo) {
-      if (bucketInfo.Contents && !bucketInfo.Contents[0]) {
-        bucketInfo.Contents = [bucketInfo.Contents];
-      }
-      callback(err, bucketInfo);
-    } else {
-      callback(true, reply.Error);
-    }
-  });
-};
-
-/* Retrieves info on one object in given bucket */
-s3.prototype.getObjectInfo = function (bucket, objectId, callback) {
-  var options = this.baseOptions();
-  options.uri = [options.uri, bucket, objectId].join('/');
-  request.head(options, function _headResponse(err, response, body) {
-    if (response.statusCode == 200) {
-      callback(err, {
-        filename: objectId,
-        'content-length': response.headers['content-length'],
-        'content-type': response.headers['content-type'],
-        'last-modified': response.headers['last-modified']
-      });
-    } else {
-      callback(response.statusCode, body);
-    }
-  });
-};
-
-/* Retrieves actual object from given bucket */
-s3.prototype.getObject = function (bucket, objectId, callback) {
-  var options = this.baseOptions();
-  options.uri = [options.uri, bucket, objectId].join('/');
-  options.encoding = null;
-  request.get(options, callback);
-};
-
-/* Generates a signed url for one object in given bucket */
-s3.prototype.getObjectUrl = function (bucket, objectId, expires, callback) {
-  if (parseInt(expires, 10) <= parseInt(Date.now()/1000, 10)) {
-    return callback(500, 'Invalid expiration, must be in the future');
-  }
-  var path = [null, bucket, objectId].join('/');
-  var verbs = ['GET', null, null, expires, path].join('\n');
-  var signature = crypto.createHmac('SHA1', this.config.secret).update(verbs).digest('base64');
-  var q = {AWSAccessKeyId: this.config.key, Expires: expires, Signature: signature};
-  var url = this.config.host + path + '?' + querystring.stringify(q);
-  callback(null, url);
-};
-
-/* Retrieves actual object from given bucket
- * Sends response straight back to callback to allow for stream piping
- * */
-s3.prototype.getRawObject = function (bucket, objectId, callback) {
-  var options = this.baseOptions();
-  options.uri = [options.uri, bucket, objectId].join('/');
-  request.get(options).pipe(callback);
-};
-
-/* Updates object from given bucket.
- * objectData is the hash given in req.files from a multi-part upload
- * */
-s3.prototype.updateObject = function (bucket, objectId, objectData, callback) {
-  var options = new this.baseOptions();
-  var self = this;
-  objectId = objectId || objectData.path.split('/').pop(); //Let object path define objectId
-  options.uri = [options.uri, bucket, objectId].join('/');
-  options.headers = {'Content-Type': objectData.type};
-  options.body = fs.readFileSync(objectData.path);
-  request.put(options, function putResponse(err, response, body) {
-    if (!err && !body) {
-      self.getObjectInfo(bucket, objectId, callback);
-    } else {
-      callback(err, body);
-    }
-  });
-};
-
-/* Alias for updateObject */
-s3.prototype.createObject = function (bucket, objectId, objectData, callback) {
-  this.updateObject(bucket, objectId, objectData, callback);
-};
-
-/* Deletes object from given bucket */
-s3.prototype.deleteObject = function (bucket, objectId, callback) {
-  var options = new this.baseOptions();
-  var self = this;
-  options.uri = [options.uri, bucket, objectId].join('/');
-  self.getObjectInfo(bucket, objectId, function _objectInfo(err, objectInfo) {
-    if (err) {
-      callback(err, objectInfo);
-    } else {
-      request.del(options, function _delResponse(err, response, body) {
-        if (!err && !body) {
-          callback(err, objectInfo);
-        } else {
-          callback(err, JSON.parse(xml.toJson(body || '')));
+    // find amazon headers
+    for (key in request.headers) {
+        header = key.toLowerCase();
+        if (header.indexOf('x-amz') === 0) {
+            headersBuffer.push(header + ':' + request.headers[key].replace('\n', ' '));
         }
-      });
     }
-  });
+    headers = headersBuffer.length ? headersBuffer.join('\n') + '\n' : '';
+
+    // find the content-type and content-md5 headers
+    Object.keys(request.headers).forEach(function (h) {
+        hl = h.toLowerCase();
+        if (hl === 'content-type') {
+            contentType = request.headers[h];
+        } else if (hl === 'content-md5') {
+            contentMD5 = request.headers[h];
+        }
+    });
+
+    // build the string
+    string = util.format('%s\n%s\n%s\n%s\n%s%s', request.method.toUpperCase(), contentMD5, contentType, date, headers, resource);
+    
+    // and generate the signature
+    signature = crypto.createHmac('sha1', this.config.secret).update(string).digest('base64');
+    return signature;
+};
+
+// normalized place to make requests
+SimpleS3.prototype._makeRequest = function (options, callback) {
+    options = options || {};
+    var date = (new Date()).toUTCString();
+    var request = _extend(this.options, options);
+    request.uri = this.host + request.path;
+    var response;
+    var error;
+    var body = [];
+    var bodyLen = 0;
+
+    // set some headers we need
+    request.headers.authorization = 'AWS ' + this.config.key + ':' + this._getSignature(options, date);
+    request.headers.date = date;
+
+    // start up a streaming xml parser
+    var parser = xml.createParser(function (err, body) {
+        // normalize keys from the returned xml
+        body = _lowerCase(body);
+        if (body.error) err = new Error(body.error.message);
+        if (typeof callback === 'function') callback(err, response, body);
+    });
+
+    // start the request
+    var req = hyperquest(request, function (err, res) {
+        var isPipe = false;
+        if (err) return callback(err);
+        response = res;
+        // if it's an application/xml it's probably a response from amazon
+        // so we pipe it through the xml parser
+        if (response.headers['content-type'] === 'application/xml') {
+            isPipe = true;
+            res.pipe(parser);
+        }
+
+        // if we're not piping it through the xml parser, and we have a callback
+        // we need to buffer the response so we can return it as the body
+        if (!isPipe && typeof callback === 'function') {
+            var buffer = [];
+
+            res.on('data', function (chunk) {
+                buffer.push(chunk);
+            });
+
+            res.on('end', function (chunk) {
+                if (chunk) buffer.push(chunk);
+                if (res.statusCode > 300 || res.statusCode < 200)
+                    return callback(new Error(http.STATUS_CODES[res.statusCode]));
+                callback(null, res, Buffer.concat(buffer));
+            });
+        }
+    });
+
+    // have to manually end HEAD requests
+    if (request.method === 'HEAD') req.end();
+
+    return req;
+};
+
+// Returns all buckets
+SimpleS3.prototype.getBuckets = function (callback) {
+    var bucketList;
+
+    this._makeRequest(null, function (err, res, body) {
+        if (err) return callback(err);
+
+        bucketList = body.listAllMyBucketsResult.buckets.bucket;
+        if (!Array.isArray(bucketList)) bucketList = [bucketList];
+
+        callback(undefined, bucketList);
+    });
+};
+
+// Returns one bucket
+SimpleS3.prototype.getBucket = function (bucketName, callback) {
+    var bucket;
+
+    this._makeRequest({ path: '/' + bucketName }, function (err, res, body) {
+        if (err) return callback(err);
+
+        bucket = body.listBucketResult;
+        if (!Array.isArray(bucket.contents)) bucket.contents = [bucket.contents];
+
+        callback(null, bucket);
+    });
+};
+
+// Create a bucket and return it
+SimpleS3.prototype.createBucket = function (bucketName, callback) {
+    var self = this;
+
+    this._makeRequest({ method: 'PUT', path: '/' + bucketName, headers: { 'x-amz-acl': 'private' } }, function (err, res, body) {
+        if (err) return callback(err);
+
+        self.getBucket(bucketName, callback);
+    }).end();
+};
+
+// Delete a bucket, return the deleted bucket
+SimpleS3.prototype.deleteBucket = function (bucketName, callback) {
+    var self = this;
+
+    this.getBucket(bucketName, function (err, bucket) {
+        if (err) return callback(err);
+
+        self._makeRequest({ method: 'DELETE', path: '/' + bucketName }, function (err, res, body) {
+            if (err) return callback(err);
+
+            callback(null, bucket);
+        });
+    });
+};
+
+// Returns metadata about the given objectId
+SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, callback) {
+    var path = '/' + bucketName + '/' + objectId;
+    var object;
+
+    this._makeRequest({ method: 'HEAD', path: path }, function (err, res, body) {
+        if (err) return callback(err);
+
+        object = {
+            key: objectId,
+            size: res.headers['content-length'],
+            mimeType: res.headers['content-type'],
+            lastModified: new Date(res.headers['last-modified']).toISOString()
+        };
+
+        callback(null, object);
+    });
+};
+
+// Returns the object itself as a buffer
+// NOTE: This function returns a stream if a callback is not specified
+SimpleS3.prototype.getObject = function (bucketName, objectId, callback) {
+    var path = '/' + bucketName + '/' + objectId;
+
+    return this._makeRequest({ path: path }, callback);
+};
+
+// Generate a signed url for a given objectId
+SimpleS3.prototype.getObjectUrl = function (bucketName, objectId, expiration, callback) {
+    var date = new Date();
+    if (expiration <= date) return callback(new Error('Expiration must be in the future'));
+
+    var expires = parseInt(expiration / 1000, 10);
+    var date = date.toUTCString();
+    var path = '/' + bucketName + '/' + objectId;
+    var string = util.format('GET\n\n\n%s\n%s', expires, path);
+    var signature = crypto.createHmac('sha1', this.config.secret).update(string).digest('base64');
+    var query = querystring.stringify({
+        AWSAccessKeyId: this.config.key,
+        Expires: expires,
+        Signature: signature
+    });
+    var url = this.host + path + '?' + query;
+    callback(null, url);
+};
+
+// Update an object, objectData should be a Buffer
+// Optionally, the objectData and callback parameters can be omitted and this will return
+// a stream that data can be piped to.
+SimpleS3.prototype.updateObject = function (bucketName, objectId, object, callback) {
+    var self = this;
+    var stream = false;
+    if (!object.data) {
+        if (!object.size) return callback(new Error('Must specify object size'));
+        stream = true;
+    } else {
+        if (!object.size) object.size = object.data.length;
+    }
+    var path = '/' + bucketName + '/' + objectId;
+    var headers = {
+        'Content-Length': object.size,
+        'Content-Type': object.type
+    };
+
+    var req = this._makeRequest({ method: 'PUT', path: path, headers: headers }, function (err, res, body) {
+        if (typeof callback !== 'function') return;
+
+        self.getObjectInfo(bucketName, objectId, callback);
+    });
+
+    if (stream) {
+        return req;
+    } else {
+        req.write(object.data);
+        req.end();
+    }
+};
+
+// Alias for updateObject
+SimpleS3.prototype.createObject = function (bucketName, objectId, object, callback) {
+    this.updateObject(bucketName, objectId, object, callback);
+};
+
+// Delete an object, return its info
+SimpleS3.prototype.deleteObject = function (bucketName, objectId, callback) {
+    var self = this;
+    var path = '/' + bucketName + '/' + objectId;
+
+    this.getObjectInfo(bucketName, objectId, function (err, object) {
+        if (err) return callback(err);
+
+        self._makeRequest({ path: path, method: 'DELETE' }, function (err, res, body) {
+            if (err) return callback(err);
+
+            callback(null, object);
+        });
+    });
 };

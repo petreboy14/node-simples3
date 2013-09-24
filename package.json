@@ -1,11 +1,11 @@
 
 {
   "name": "simples3",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "A simple s3 library for node",
   "dependencies": {
-    "querystring": "",
-    "request": "*",
-    "xml2json": ""
+    "hyperquest": "0.1.7",
+    "faketoe": "0.1.1",
+    "varname": "1.0.2"
   }
 }
