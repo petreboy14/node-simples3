@@ -133,3 +133,15 @@ s3Store.deleteObject('myBucket', 'cat_macro.png', function _deletedObject(err, d
   console.log(deletedObject);
 });
 ```
+
+Parse a url
+-----------
+
+```javascript
+s3Store.parseUrl('http://s3.amazonaws.com/yourbucket/your/resource/name.jpg', function (err, result) {
+  // Returns an object with 'bucket' and 'resource' properties
+});
+
+// Also works synchronously
+var parts = s3Store.parseUrl('http://s3.amazonaws.com/yourbucket/your/resource/name.jpg');
+```
