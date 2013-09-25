@@ -333,21 +333,22 @@ SimpleS3.prototype.deleteObject = function (bucketName, objectId, callback) {
     });
 };
 
-// Parses an S3 URL into its bucket and resource parts, this function works both async and sync
+// Parses an S3 URL into its bucketName and objectId parts, this function works both async and sync
 SimpleS3.prototype.parseUrl = function (url, callback) {
-    var re = new RegExp('^https?:\\/\\/(\\w+)?\\.' + this.host.replace('.', '\\.') + '(.*)$');
+    var host = this.host.slice(this.host.indexOf('://') + 3).replace(/\./g, '\\.');
+    var re = new RegExp('^https?:\\/\\/(\\w+)?\\.' + host + '\\/(.*)$');
     var result = re.exec(url);
-    var bucket;
-    var resource;
+    var bucketName;
+    var objectId;
 
     if (result[1]) {
-        bucket = result[1];
-        resource = result[2];
+        bucketName = result[1];
+        objectId = result[2];
     } else {
-        bucket = result[2].split('/')[1];
-        resource = result[2].slice(bucket.length + 1);
+        bucketName = result[2].split('/')[1];
+        objectId = result[2].slice(bucketName.length + 2);
     }
 
-    if (typeof callback === 'function') callback(null, { bucket: bucket, resource: resource });
-    return { bucket: bucket, resource: resource };
+    if (typeof callback === 'function') callback(null, { bucketName: bucketName, objectId: objectId });
+    return { bucketName: bucketName, objectId: objectId };
 };
