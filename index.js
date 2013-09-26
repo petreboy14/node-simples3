@@ -341,6 +341,11 @@ SimpleS3.prototype.parseUrl = function (url, callback) {
     var bucketName;
     var objectId;
 
+    if (!result) {
+        if (typeof callback === 'function') return callback(new Error('Invalid URL'));
+        return null;
+    }
+
     if (result[1]) {
         bucketName = result[1];
         objectId = result[2];
