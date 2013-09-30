@@ -241,6 +241,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, callback) {
 
     this._makeRequest({ method: 'HEAD', path: path }, function (err, res, body) {
         if (err) return callback(err);
+        if (res.statusCode !== 200) return callback(new Error('not found'));
 
         object = {
             key: objectId,
