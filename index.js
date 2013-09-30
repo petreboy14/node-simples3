@@ -241,7 +241,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, callback) {
 
     this._makeRequest({ method: 'HEAD', path: path }, function (err, res, body) {
         if (err) return callback(err);
-        if (res.statusCode !== 200) return callback(new Error('not found'));
+        if (res.statusCode !== 200) return callback(new Error('Not found'));
 
         object = {
             key: objectId,
@@ -337,7 +337,7 @@ SimpleS3.prototype.deleteObject = function (bucketName, objectId, callback) {
 // Parses an S3 URL into its bucketName and objectId parts, this function works both async and sync
 SimpleS3.prototype.parseUrl = function (url, callback) {
     var host = this.host.slice(this.host.indexOf('://') + 3).replace(/\./g, '\\.');
-    var re = new RegExp('^https?:\\/\\/(\\w+)?\\.' + host + '\\/(.*)$');
+    var re = new RegExp('^https?:\\/\\/(\\w+)?\\.?' + host + '\\/(.*)$');
     var result = re.exec(url);
     var bucketName;
     var objectId;
@@ -351,8 +351,8 @@ SimpleS3.prototype.parseUrl = function (url, callback) {
         bucketName = result[1];
         objectId = result[2];
     } else {
-        bucketName = result[2].split('/')[1];
-        objectId = result[2].slice(bucketName.length + 2);
+        bucketName = result[2].split('/')[0];
+        objectId = result[2].slice(bucketName.length + 1);
     }
 
     if (typeof callback === 'function') callback(null, { bucketName: bucketName, objectId: objectId });
