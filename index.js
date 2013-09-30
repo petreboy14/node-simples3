@@ -86,12 +86,23 @@ SimpleS3.prototype._getSignature = function (options, date) {
     var contentType = '';
     var contentMD5 = '';
 
+    var encodeHeaders = [
+        'acl', 'lifecycle', 'location', 'logging',
+        'notification', 'partNumber', 'policy',
+        'requestPayment', 'torrent', 'uploadId',
+        'uploads', 'versionId', 'versioning',
+        'versions', 'website', 'delete'
+    ];
+
     // sort and append query parameters to the resource string
     if (Object.keys(parsedUri.query).length) {
         for (key in parsedUri.query) {
-            query.push(key + '=' + parsedUri.query[key]);
+            // we have to append these keys as part of the request
+            if (encodeHeaders.indexOf(key) !== -1) {
+                query.push(key + '=' + parsedUri.query[key]);
+            }
         }
-        resource += '?' + query.sort().join('&');
+        if (query.length) resource += '?' + query.sort().join('&');
     }
 
     // find amazon headers
@@ -195,16 +206,66 @@ SimpleS3.prototype.getBuckets = function (callback) {
 };
 
 // Returns one bucket
-SimpleS3.prototype.getBucket = function (bucketName, callback) {
+SimpleS3.prototype.getBucket = function (bucketName, directory, callback) {
     var bucket;
+    var path = '/' + bucketName + '?delimiter=/';
 
-    this._makeRequest({ path: '/' + bucketName }, function (err, res, body) {
+    if (typeof directory === 'function') {
+        callback = directory;
+        directory = undefined;
+    }
+
+    if (directory && directory !== '/') {
+        if (directory[0] === '/') directory = directory.slice(1);
+        if (directory[directory.length - 1] !== '/') directory += '/';
+        path += '&prefix=' + directory;
+    }
+
+    this._makeRequest({ path: path }, function (err, res, body) {
         if (err) return callback(err);
 
         bucket = body.listBucketResult;
-        if (!Array.isArray(bucket.contents)) bucket.contents = [bucket.contents];
 
-        callback(null, bucket);
+        // make sure contents is an array
+        if (!Array.isArray(bucket.contents)) {
+            if (bucket.contents) {
+                bucket.contents = [bucket.contents];
+            } else {
+                bucket.contents = [];
+            }
+        }
+
+        bucket.contents = bucket.contents.filter(function (obj) {
+            return (obj.key[obj.key.length - 1] !== '/');
+        }).map(function (obj) {
+            obj.key = '/' + obj.key;
+            return obj;
+        });
+
+        // make sure commonPrefixes is an array
+        if (!Array.isArray(bucket.commonPrefixes)) {
+            if (bucket.commonPrefixes) {
+                bucket.commonPrefixes = [bucket.commonPrefixes];
+            } else {
+                bucket.commonPrefixes = [];
+            }
+        }
+
+        bucket.commonPrefixes = bucket.commonPrefixes.map(function (obj) {
+            return '/' + obj.prefix;
+        });
+
+        var result = {
+            bucket: bucket.name,
+            contents: {
+                files: bucket.contents,
+                directories: bucket.commonPrefixes
+            },
+            path: '/' + bucket.prefix,
+            isTruncated: bucket.isTruncated
+        };
+
+        callback(null, result);
     });
 };
 
