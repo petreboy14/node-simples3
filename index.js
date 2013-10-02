@@ -317,10 +317,14 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, callback) {
 
 // Returns the object itself as a buffer
 // NOTE: This function returns a stream if a callback is not specified
-SimpleS3.prototype.getObject = function (bucketName, objectId, callback) {
+SimpleS3.prototype.getObject = function (bucketName, objectId, extraHeaders, callback) {
     var path = '/' + bucketName + '/' + objectId;
+    if (typeof extraHeaders === 'function') {
+        callback = extraHeaders;
+        extraHeaders = undefined;
+    }
 
-    return this._makeRequest({ path: path }, callback);
+    return this._makeRequest({ path: path, headers: extraHeaders }, callback);
 };
 
 // Generate a signed url for a given objectId
