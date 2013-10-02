@@ -316,7 +316,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, extraHeaders,
             lastModified: new Date(res.headers['last-modified']).toISOString()
         };
 
-        callback(null, object);
+        callback(null, object, res.headers);
     });
 };
 
