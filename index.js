@@ -296,11 +296,16 @@ SimpleS3.prototype.deleteBucket = function (bucketName, callback) {
 };
 
 // Returns metadata about the given objectId
-SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, callback) {
+SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, extraHeaders, callback) {
     var path = '/' + bucketName + '/' + objectId;
     var object;
 
-    this._makeRequest({ method: 'HEAD', path: path }, function (err, res, body) {
+    if (typeof extraHeaders === 'function') {
+        callback = extraHeaders;
+        extraHeaders = undefined;
+    }
+
+    this._makeRequest({ method: 'HEAD', path: path, headers: extraHeaders }, function (err, res, body) {
         if (err) return callback(err);
         if (res.statusCode !== 200) return callback(new Error('Not found'));
 
