@@ -301,7 +301,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, extraHeaders,
 
     this._makeRequest({ method: 'HEAD', path: path, headers: extraHeaders }, function (err, res, body) {
         if (err) return callback(err);
-        if (res.statusCode !== 200) return callback(new Error('Not found'));
+        if (res.statusCode < 200 || res.statusCode >= 300) return callback(new Error('Not found'));
 
         object = {
             key: objectId,
