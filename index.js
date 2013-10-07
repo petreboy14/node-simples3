@@ -108,21 +108,15 @@ SimpleS3.prototype._getSignature = function (options, date) {
     // find amazon headers
     for (key in request.headers) {
         header = key.toLowerCase();
-        if (header.indexOf('x-amz') === 0) {
+        if (header === 'content-type') {
+            contentType = request.headers[header];
+        } else if (header === 'content-md5') {
+            contentMD5 = request.headers[header];
+        } else if (header.indexOf('x-amz') === 0) {
             headersBuffer.push(header + ':' + request.headers[key].replace('\n', ' '));
         }
     }
     headers = headersBuffer.length ? headersBuffer.join('\n') + '\n' : '';
-
-    // find the content-type and content-md5 headers
-    Object.keys(request.headers).forEach(function (h) {
-        var hl = h.toLowerCase();
-        if (hl === 'content-type') {
-            contentType = request.headers[h];
-        } else if (hl === 'content-md5') {
-            contentMD5 = request.headers[h];
-        }
-    });
 
     // build the string
     string = util.format('%s\n%s\n%s\n%s\n%s%s', request.method.toUpperCase(), contentMD5, contentType, date, headers, resource);
@@ -302,7 +296,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, extraHeaders,
 
     if (typeof extraHeaders === 'function') {
         callback = extraHeaders;
-        extraHeaders = undefined;
+        extraHeaders = {};
     }
 
     this._makeRequest({ method: 'HEAD', path: path, headers: extraHeaders }, function (err, res, body) {
