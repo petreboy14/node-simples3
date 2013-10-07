@@ -129,6 +129,7 @@ SimpleS3.prototype._getSignature = function (options, date) {
 // normalized place to make requests
 SimpleS3.prototype._makeRequest = function (options, callback) {
     options = options || {};
+    options.headers = options.headers || {};
     var date = (new Date()).toUTCString();
     var request = _extend(this.options, options);
     request.uri = this.host + request.path;
@@ -296,7 +297,7 @@ SimpleS3.prototype.getObjectInfo = function (bucketName, objectId, extraHeaders,
 
     if (typeof extraHeaders === 'function') {
         callback = extraHeaders;
-        extraHeaders = {};
+        extraHeaders = undefined;
     }
 
     this._makeRequest({ method: 'HEAD', path: path, headers: extraHeaders }, function (err, res, body) {
